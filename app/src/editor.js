@@ -31,13 +31,11 @@ const CURATED = {
   'friends.jpg': { x: 0.55, y: 0.41 },
   'pier.jpg': { x: 0.5, y: 0.42 },
   'driver.jpg': { x: 0.47, y: 0.4 },
-  // Raised above the face centre: the wide panels crop a narrow band, and
-  // the cap is cut off at the face point. 0.40 is the best compromise the
-  // portrait panel allows — its window is only ~half the photo tall, so
-  // the whole cap and the whole mouth cannot both fit; this keeps the
-  // full face visible while cutting the least cap (0.33 shows the cap
-  // but hides the mouth behind the caption band).
-  'captain.jpg': { x: 0.5, y: 0.4 },
+  // Landscape 2:1 re-shoot (r5): the whole head, cap and shoulders fit
+  // inside the frame with room to spare, so both wide panel windows show
+  // the full photo height — nothing is cropped. Face centre measured by
+  // eye: eyes ~0.47, mouth ~0.62, so the face centre is ~0.52.
+  'captain.jpg': { x: 0.5, y: 0.52 },
   'boulevard.jpg': { x: 0.51, y: 0.29 },
   'angler.jpg': { x: 0.5, y: 0.33 },
 };
