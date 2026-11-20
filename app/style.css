@@ -8,9 +8,12 @@ html, body { margin: 0; min-height: 100%; background: #14091f; color: #f5eef7; f
 .logo { font-family: 'Anton', sans-serif; font-size: 26px; letter-spacing: 2px; background: linear-gradient(90deg, #ffd23f, #ff7a18, #ff2e88, #7b2ff7); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .sub { font-size: 12px; color: #c9a8d8; }
 .sizes { display: flex; gap: 6px; margin-left: auto; }
+.history { display: flex; gap: 8px; }
 .exports { display: flex; gap: 8px; }
 button { font: inherit; font-weight: 600; padding: 8px 12px; border: 1px solid #4a2560; border-radius: 8px; background: #2a1238; color: #f5eef7; cursor: pointer; }
 button:hover { background: #3a1a52; }
+button:disabled { opacity: 0.4; cursor: default; }
+button:disabled:hover { background: #2a1238; }
 button.primary { background: #ff2e88; border-color: #ff2e88; color: #fff; }
 button.primary:hover { background: #e01e76; }
 .opt.active { background: #ff2e88; border-color: #ff2e88; color: #fff; }

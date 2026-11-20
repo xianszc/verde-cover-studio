@@ -94,6 +94,209 @@ function queueRender() {
   requestAnimationFrame(() => { renderQueued = false; renderPreview(); });
 }
 
+// ---- history: undo / redo -----------------------------------------------
+// Post-state stacks: each entry is a full snapshot of the editable state
+// (layout, grade, captions, panels). commitHistory() records the state after
+// a change; undo steps back to the previous snapshot, redo steps forward.
+const history = { undo: [], redo: [] };
+let commitTimer = null;
+
+function snapshotState() {
+  return JSON.stringify({
+    layout: state.layout,
+    grade: state.grade,
+    title: state.title,
+    subtitle: state.subtitle,
+    tagline: state.tagline,
+    quote: state.quote,
+    quoteSource: state.quoteSource,
+    vol: state.vol,
+    size: state.size,
+    selected: state.selected,
+    panels: state.panels,
+  });
+}
+
+function applySnapshot(json) {
+  const s = JSON.parse(json);
+  state.layout = s.layout;
+  state.grade = s.grade;
+  state.title = s.title;
+  state.subtitle = s.subtitle;
+  state.tagline = s.tagline;
+  state.quote = s.quote;
+  state.quoteSource = s.quoteSource;
+  state.vol = s.vol;
+  state.size = s.size;
+  state.selected = s.selected;
+  state.panels = s.panels.map((p) => ({ ...p }));
+  state.panels.forEach((p) => { if (p.photoIdx == null || !state.photos[p.photoIdx]) p.photoIdx = 0; });
+  refreshAllUI();
+  queueRender();
+  scheduleAutosave();
+}
+
+function commitHistory() {
+  const snap = snapshotState();
+  if (history.undo[history.undo.length - 1] === snap) return;
+  history.undo.push(snap);
+  if (history.undo.length > 60) history.undo.shift();
+  history.redo.length = 0;
+  updateHistoryButtons();
+  scheduleAutosave();
+}
+
+/** Debounced commit for continuous input (typing, sliders, drag, wheel). */
+function commitSoon() {
+  clearTimeout(commitTimer);
+  commitTimer = setTimeout(commitHistory, 400);
+}
+
+function updateHistoryButtons() {
+  $('undo').disabled = history.undo.length < 2;
+  $('redo').disabled = history.redo.length === 0;
+}
+
+function undo() {
+  if (history.undo.length < 2) return;
+  history.redo.push(history.undo.pop());
+  applySnapshot(history.undo[history.undo.length - 1]);
+  updateHistoryButtons();
+  setStatus('Undone.');
+}
+
+function redo() {
+  if (!history.redo.length) return;
+  const snap = history.redo.pop();
+  history.undo.push(snap);
+  applySnapshot(snap);
+  updateHistoryButtons();
+  setStatus('Redone.');
+}
+
+// ---- project: autosave, save / load as JSON -------------------------------
+
+const AUTOSAVE_KEY = 'verde-heat-project-v1';
+let autosaveTimer = null;
+
+/** Downscales an image to a JPEG data URL so an uploaded photo can be stored. */
+function downscaleDataUrl(img) {
+  const max = 900;
+  const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(img.naturalWidth * scale));
+  c.height = Math.max(1, Math.round(img.naturalHeight * scale));
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.75);
+}
+
+/** The whole project as JSON: captions, layout, grade, panels and photos. */
+function serializeProject() {
+  return JSON.stringify({
+    app: 'verde-heat-cover-studio',
+    version: 1,
+    savedAt: new Date().toISOString(),
+    layout: state.layout,
+    grade: state.grade,
+    title: state.title,
+    subtitle: state.subtitle,
+    tagline: state.tagline,
+    quote: state.quote,
+    quoteSource: state.quoteSource,
+    vol: state.vol,
+    size: state.size,
+    selected: state.selected,
+    panels: state.panels,
+    photos: state.photos.map((p) => {
+      if (p.file && p.file.startsWith('samples/')) return { name: p.name, file: p.file };
+      if (p.dataUrl) return { name: p.name, dataUrl: p.dataUrl };
+      return { name: p.name, dataUrl: downscaleDataUrl(p.img) };
+    }),
+  });
+}
+
+function scheduleAutosave() {
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(AUTOSAVE_KEY, serializeProject());
+      const note = $('autosave-note');
+      if (note) note.textContent = `Autosaved ${new Date().toLocaleTimeString()} — restores when you reopen this page.`;
+    } catch { /* private mode or quota: autosave is silently off */ }
+  }, 800);
+}
+
+async function restoreAutosave() {
+  let raw = null;
+  try { raw = localStorage.getItem(AUTOSAVE_KEY); } catch { /* no storage */ }
+  if (!raw) return false;
+  const ok = await loadProjectData(raw);
+  if (ok) setStatus('Restored your autosaved project.');
+  return ok;
+}
+
+/** Rebuilds the editor from a project JSON string. Returns false when invalid. */
+async function loadProjectData(json) {
+  let data;
+  try { data = JSON.parse(json); } catch { return false; }
+  if (!data || data.app !== 'verde-heat-cover-studio' || !Array.isArray(data.photos) || !Array.isArray(data.panels)) return false;
+  const photos = [];
+  for (const entry of data.photos) {
+    try {
+      const src = entry.file || entry.dataUrl;
+      if (!src) continue;
+      const img = await loadImage(src);
+      photos.push({ img, name: entry.name || 'Photo', file: src, dataUrl: entry.dataUrl || null });
+    } catch { /* skip unreadable photos */ }
+  }
+  if (!photos.length) return false;
+  state.photos = photos;
+  state.layout = LAYOUTS[data.layout] ? data.layout : 'hero-six';
+  state.grade = GRADES[data.grade] ? data.grade : 'sunset';
+  state.title = String(data.title ?? 'VERDE HEAT');
+  state.subtitle = String(data.subtitle ?? '');
+  state.tagline = String(data.tagline ?? '');
+  state.quote = String(data.quote ?? '');
+  state.quoteSource = String(data.quoteSource ?? 'VERDE GAZETTE');
+  state.vol = String(data.vol ?? 'VOL. 01');
+  state.size = SIZES[data.size] ? data.size : '1080x1350';
+  state.selected = Math.min(Math.max(0, data.selected | 0), DEFAULT_PANELS.length - 1);
+  state.panels = DEFAULT_PANELS.map((d, i) => ({ ...d, ...(data.panels[i] || {}) }));
+  state.panels.forEach((p) => { if (p.photoIdx == null || !state.photos[p.photoIdx]) p.photoIdx = 0; });
+  state.activePhoto = state.panels[state.selected]?.photoIdx ?? 0;
+  refreshAllUI();
+  queueRender();
+  return true;
+}
+
+function saveProject() {
+  try {
+    downloadBlob(new Blob([serializeProject()], { type: 'application/json' }), 'verde-heat-project.json');
+    setStatus('Project saved as verde-heat-project.json — load it back any time.');
+  } catch {
+    setStatus('Could not save the project in this browser.');
+  }
+}
+
+function refreshOptionButtons() {
+  buildOptionButtons('layout-options', LAYOUTS, state.layout, (key) => { state.layout = key; buildPanelList(); syncPanelEditor(); queueRender(); commitHistory(); });
+  buildOptionButtons('grade-options', GRADES, state.grade, (key) => { state.grade = key; queueRender(); commitHistory(); });
+  buildOptionButtons('size-options', { '1080x1080': '1080 × 1080', '1080x1350': '1080 × 1350', '1920x1080': '1920 × 1080' }, state.size, (key) => { state.size = key; queueRender(); commitHistory(); });
+}
+
+/** Rebuilds every control from the state (used after undo/redo/project load). */
+function refreshAllUI() {
+  refreshOptionButtons();
+  buildPanelList();
+  syncPanelEditor();
+  refreshPhotoStrip();
+  $('caption-title').value = state.title;
+  $('caption-subtitle').value = state.subtitle;
+  $('caption-tagline').value = state.tagline;
+  $('caption-quote').value = state.quote;
+  updateHistoryButtons();
+}
+
 /** Renders the cover at an exact post size and returns the PNG blob. */
 export async function exportCoverPNG(sizeKey) {
   const [W, H] = SIZES[sizeKey];
@@ -147,6 +350,7 @@ function refreshPhotoStrip() {
       syncPanelEditor();
       refreshPhotoStrip();
       queueRender();
+      commitHistory();
     });
     strip.appendChild(btn);
   });
@@ -189,6 +393,7 @@ $('upload').addEventListener('change', async (e) => {
     state.activePhoto = state.photos.length - 1;
     refreshPhotoStrip();
     queueRender();
+    commitHistory();
     setStatus(`${files.length} photo${files.length > 1 ? 's' : ''} added. Click a thumbnail to put it in the selected panel.`);
   }
   e.target.value = '';
@@ -240,22 +445,25 @@ $('panel-photo').addEventListener('change', (e) => {
   state.activePhoto = Number(e.target.value);
   refreshPhotoStrip();
   queueRender();
+  commitHistory();
 });
 $('panel-zoom').addEventListener('input', (e) => {
   state.panels[state.selected].zoom = Number(e.target.value);
   $('panel-zoom-val').textContent = `${Number(e.target.value).toFixed(2)}×`;
   queueRender();
+  commitSoon();
 });
-$('panel-ox').addEventListener('input', (e) => { state.panels[state.selected].ox = Number(e.target.value); queueRender(); });
-$('panel-oy').addEventListener('input', (e) => { state.panels[state.selected].oy = Number(e.target.value); queueRender(); });
-$('panel-role').addEventListener('input', (e) => { state.panels[state.selected].role = e.target.value.toUpperCase(); buildPanelList(); syncPanelEditor(); queueRender(); });
-$('panel-place').addEventListener('input', (e) => { state.panels[state.selected].place = e.target.value.toUpperCase(); queueRender(); });
-$('panel-time').addEventListener('input', (e) => { state.panels[state.selected].time = e.target.value.toUpperCase(); queueRender(); });
-$('panel-micro').addEventListener('input', (e) => { state.panels[state.selected].micro = e.target.value; queueRender(); });
+$('panel-ox').addEventListener('input', (e) => { state.panels[state.selected].ox = Number(e.target.value); queueRender(); commitSoon(); });
+$('panel-oy').addEventListener('input', (e) => { state.panels[state.selected].oy = Number(e.target.value); queueRender(); commitSoon(); });
+$('panel-role').addEventListener('input', (e) => { state.panels[state.selected].role = e.target.value.toUpperCase(); buildPanelList(); syncPanelEditor(); queueRender(); commitSoon(); });
+$('panel-place').addEventListener('input', (e) => { state.panels[state.selected].place = e.target.value.toUpperCase(); queueRender(); commitSoon(); });
+$('panel-time').addEventListener('input', (e) => { state.panels[state.selected].time = e.target.value.toUpperCase(); queueRender(); commitSoon(); });
+$('panel-micro').addEventListener('input', (e) => { state.panels[state.selected].micro = e.target.value; queueRender(); commitSoon(); });
 $('panel-warmth').addEventListener('input', (e) => {
   state.panels[state.selected].warmth = Number(e.target.value);
   $('panel-warmth-val').textContent = Number(e.target.value) > 0 ? `+${Number(e.target.value).toFixed(1)}` : Number(e.target.value).toFixed(1);
   queueRender();
+  commitSoon();
 });
 
 $('autocrop').addEventListener('click', () => {
@@ -274,6 +482,7 @@ $('autocrop').addEventListener('click', () => {
   }
   syncPanelEditor();
   queueRender();
+  commitHistory();
 });
 
 $('fill-all').addEventListener('click', () => {
@@ -281,6 +490,7 @@ $('fill-all').addEventListener('click', () => {
   state.panels.forEach((p) => { p.photoIdx = idx; });
   setStatus('One photo now fills every panel.');
   queueRender();
+  commitHistory();
 });
 
 // ---- drag to position, wheel to zoom ----------------------------------------
@@ -323,7 +533,10 @@ canvas.addEventListener('pointermove', (e) => {
   $('panel-oy').value = String(panel.oy);
   queueRender();
 });
-canvas.addEventListener('pointerup', () => { drag = null; });
+canvas.addEventListener('pointerup', () => {
+  if (drag) commitHistory();
+  drag = null;
+});
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   const panel = state.panels[state.selected];
@@ -331,6 +544,7 @@ canvas.addEventListener('wheel', (e) => {
   $('panel-zoom').value = String(panel.zoom);
   $('panel-zoom-val').textContent = `${panel.zoom.toFixed(2)}×`;
   queueRender();
+  commitSoon();
 }, { passive: false });
 
 // ---- layout, grade, caption, size -------------------------------------------
@@ -352,25 +566,61 @@ function buildOptionButtons(containerId, items, current, onPick) {
   }
 }
 
-buildOptionButtons('layout-options', LAYOUTS, state.layout, (key) => { state.layout = key; buildPanelList(); syncPanelEditor(); queueRender(); });
-buildOptionButtons('grade-options', GRADES, state.grade, (key) => { state.grade = key; queueRender(); });
-buildOptionButtons('size-options', { '1080x1080': '1080 × 1080', '1080x1350': '1080 × 1350', '1920x1080': '1920 × 1080' }, state.size, (key) => { state.size = key; queueRender(); });
+refreshOptionButtons();
 
 $('shuffle').addEventListener('click', () => {
   const layouts = Object.keys(LAYOUTS);
   const grades = Object.keys(GRADES);
   state.layout = layouts[Math.floor(Math.random() * layouts.length)];
   state.grade = grades[Math.floor(Math.random() * grades.length)];
-  buildOptionButtons('layout-options', LAYOUTS, state.layout, (key) => { state.layout = key; buildPanelList(); syncPanelEditor(); queueRender(); });
-  buildOptionButtons('grade-options', GRADES, state.grade, (key) => { state.grade = key; queueRender(); });
+  refreshOptionButtons();
   queueRender();
+  commitHistory();
   setStatus(`Shuffled: ${LAYOUTS[state.layout]} + ${GRADES[state.grade]}.`);
 });
 
-$('caption-title').addEventListener('input', (e) => { state.title = e.target.value; queueRender(); });
-$('caption-subtitle').addEventListener('input', (e) => { state.subtitle = e.target.value; queueRender(); });
-$('caption-tagline').addEventListener('input', (e) => { state.tagline = e.target.value; queueRender(); });
-$('caption-quote').addEventListener('input', (e) => { state.quote = e.target.value; queueRender(); });
+$('undo').addEventListener('click', undo);
+$('redo').addEventListener('click', redo);
+$('save-project').addEventListener('click', saveProject);
+$('load-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  const ok = await loadProjectData(text);
+  if (ok) {
+    history.undo.length = 0;
+    history.redo.length = 0;
+    commitHistory();
+    setStatus(`Project "${file.name}" loaded.`);
+  } else {
+    setStatus('That file is not a VERDE HEAT project — nothing changed.');
+  }
+  e.target.value = '';
+});
+
+// Undo/redo shortcuts (Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y), and Ctrl+S to save.
+// Text fields keep their native undo: the shortcuts only fire outside them.
+document.addEventListener('keydown', (e) => {
+  const tag = (e.target.tagName || '').toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault();
+    saveProject();
+    return;
+  }
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    undo();
+  } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
+    e.preventDefault();
+    redo();
+  }
+});
+
+$('caption-title').addEventListener('input', (e) => { state.title = e.target.value; queueRender(); commitSoon(); });
+$('caption-subtitle').addEventListener('input', (e) => { state.subtitle = e.target.value; queueRender(); commitSoon(); });
+$('caption-tagline').addEventListener('input', (e) => { state.tagline = e.target.value; queueRender(); commitSoon(); });
+$('caption-quote').addEventListener('input', (e) => { state.quote = e.target.value; queueRender(); commitSoon(); });
 
 $('export-one').addEventListener('click', () => exportOne(state.size));
 $('export-all').addEventListener('click', exportAll);
@@ -381,8 +631,9 @@ async function boot() {
   buildPanelList();
   syncPanelEditor();
   await loadSamples();
-  buildPanelList();
-  syncPanelEditor();
+  // An autosaved project from an earlier visit replaces the defaults.
+  await restoreAutosave();
+  refreshAllUI();
   // Wait for the display fonts before the first paint, so the title never falls
   // back to a system font in the preview or a screenshot.
   try {
@@ -393,6 +644,8 @@ async function boot() {
     ]);
   } catch { /* fonts still usable once loaded; render anyway */ }
   renderPreview();
+  // The starting point of the undo history.
+  commitHistory();
   const shot = new URLSearchParams(location.search).get('shot');
   if (shot) {
     await runShot(shot, new URLSearchParams(location.search), {
@@ -407,5 +660,5 @@ async function boot() {
   setStatus('Ready — pick a photo, drag any panel to reposition it, then export.');
 }
 
-window.__verde = { state, renderPreview, exportCoverPNG, selectPanel };
+window.__verde = { state, history, renderPreview, exportCoverPNG, selectPanel, undo, redo, serializeProject, loadProjectData };
 boot();

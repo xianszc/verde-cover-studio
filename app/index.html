@@ -11,6 +11,10 @@
 <header class="topbar">
   <div class="brand"><span class="logo">VERDE HEAT</span><span class="sub">Cover Studio — GTA-style poster maker</span></div>
   <div class="sizes" id="size-options" role="group" aria-label="Export size"></div>
+  <div class="history">
+    <button id="undo" type="button" disabled>Undo</button>
+    <button id="redo" type="button" disabled>Redo</button>
+  </div>
   <div class="exports">
     <button id="export-one" type="button" class="primary">Export PNG</button>
     <button id="export-all" type="button">Export all 3 sizes</button>
@@ -40,11 +44,19 @@
       <label>Tagline <input id="caption-tagline" type="text" maxlength="60" value="SIX SOULS · ONE COAST · GOLDEN HOUR"></label>
       <label>Press quote <input id="caption-quote" type="text" maxlength="60" value="&quot;A sun-soaked blast.&quot;"></label>
     </section>
+    <section>
+      <h2>5 · Project</h2>
+      <div class="row">
+        <button id="save-project" type="button">Save project</button>
+        <label class="upload" style="flex:1;margin:0">Load project <input id="load-file" type="file" accept="application/json,.json" hidden></label>
+      </div>
+      <p class="hint" id="autosave-note">Autosave on — your work is kept in this browser and restored when you reopen the page.</p>
+    </section>
   </aside>
   <section class="stage">
     <canvas id="cover" width="1080" height="1350" aria-label="Live cover preview"></canvas>
     <p id="status" role="status"></p>
-    <p class="hint">Drag a panel to move its photo · Scroll to zoom · Click a panel to edit it</p>
+    <p class="hint">Drag a panel to move its photo · Scroll to zoom · Click a panel to edit it · Ctrl+Z undo · Ctrl+S save project</p>
   </section>
   <aside class="panel right">
     <section>

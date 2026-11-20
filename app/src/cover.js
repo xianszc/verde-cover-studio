@@ -29,7 +29,7 @@ export function computeLayout(W, H, layout) {
   const m = Math.round(W * 0.028);
   const g = Math.max(6, Math.round(W * 0.011));
   const titleH = Math.round(H * (H >= W ? 0.148 : 0.24));
-  const footH = Math.round(H * 0.072);
+  const footH = Math.round(H * 0.095);
   const ax = m;
   const ay = titleH + Math.round(H * 0.008);
   const aw = W - 2 * m;
@@ -107,7 +107,7 @@ export function computeLayout(W, H, layout) {
 function gradeFilter(grade, warmth) {
   let f = '';
   if (grade === 'sunset') f = 'saturate(1.28) contrast(1.07) brightness(1.03) sepia(0.22)';
-  else if (grade === 'neon') f = 'saturate(1.55) contrast(1.14) brightness(0.99) hue-rotate(-6deg)';
+  else if (grade === 'neon') f = 'saturate(1.95) contrast(1.3) brightness(0.94) hue-rotate(-22deg)';
   else f = 'saturate(0.22) contrast(1.28) brightness(0.96)';
   if (warmth > 0) f += ` sepia(${(warmth * 0.3).toFixed(2)}) hue-rotate(${(warmth * 8).toFixed(1)}deg)`;
   else if (warmth < 0) f += ` hue-rotate(${(warmth * 14).toFixed(1)}deg) saturate(${(1 + warmth * 0.25).toFixed(2)})`;
@@ -215,11 +215,16 @@ function drawPanel(ctx, img, rect, panel, grade, isHero, popOut) {
       ctx.fillRect(0, 0, w, photoH);
       ctx.globalCompositeOperation = 'source-over';
     } else if (grade === 'neon') {
+      // Neon nights: a hard magenta/cyan duotone wash, then a deep violet
+      // multiply pass that crushes the shadows — unmistakably not Sunset.
       const wash = ctx.createLinearGradient(0, 0, w, photoH);
-      wash.addColorStop(0, 'rgba(255, 0, 120, 0.20)');
-      wash.addColorStop(1, 'rgba(0, 220, 255, 0.20)');
+      wash.addColorStop(0, 'rgba(255, 0, 150, 0.34)');
+      wash.addColorStop(1, 'rgba(0, 220, 255, 0.34)');
       ctx.globalCompositeOperation = 'overlay';
       ctx.fillStyle = wash;
+      ctx.fillRect(0, 0, w, photoH);
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = 'rgba(48, 0, 96, 0.26)';
       ctx.fillRect(0, 0, w, photoH);
       ctx.globalCompositeOperation = 'source-over';
     } else {
@@ -276,6 +281,18 @@ function drawPanel(ctx, img, rect, panel, grade, isHero, popOut) {
     ctx.stroke();
     ctx.restore();
   }
+  // Neon nights: a glowing cyan keyline around every panel, so the grade
+  // reads on the frame as well as in the photo.
+  if (grade === 'neon') {
+    ctx.save();
+    ctx.strokeStyle = '#00e5ff';
+    ctx.lineWidth = Math.max(2, w * 0.006);
+    ctx.shadowColor = '#00e5ff';
+    ctx.shadowBlur = Math.max(6, w * 0.03);
+    roundRect(ctx, rect.x, rect.y, rect.w, rect.h, r);
+    ctx.stroke();
+    ctx.restore();
+  }
   if (rect.polaroid && panel.micro) {
     // Caption written on the snapshot's white foot strip.
     ctx.save();
@@ -315,7 +332,8 @@ function drawTitleBlock(ctx, W, H, geo, state) {
   ctx.fillStyle = '#ffffff';
   ctx.font = `bold ${Math.round(volH * 0.52)}px system-ui, sans-serif`;
   ctx.fillText(state.vol, W - m - volW / 2, topY + volH / 2 + 1);
-  // Huge gradient title with a thick dark outline.
+  // Huge gradient title with a thick dark outline. Neon nights gets a
+  // cyan-to-magenta gradient and a neon glow instead of the sunset one.
   const title = (state.title || 'VERDE HEAT').toUpperCase();
   const maxW = W - 2 * m;
   const baseY = titleH * 0.7;
@@ -325,16 +343,24 @@ function drawTitleBlock(ctx, W, H, geo, state) {
   size = fitFont(ctx, title, (s) => `${s}px Anton, sans-serif`, maxW, size);
   try { ctx.letterSpacing = `${Math.round(size * 0.02)}px`; } catch { /* older canvas */ }
   const grad = ctx.createLinearGradient(0, baseY - size, 0, baseY + size * 0.15);
-  grad.addColorStop(0, '#ffd23f');
-  grad.addColorStop(0.38, '#ff7a18');
-  grad.addColorStop(0.68, '#ff2e88');
-  grad.addColorStop(1, '#7b2ff7');
+  const neon = state.grade === 'neon';
+  if (neon) {
+    grad.addColorStop(0, '#8ef6ff');
+    grad.addColorStop(0.4, '#00e5ff');
+    grad.addColorStop(0.72, '#ff2e88');
+    grad.addColorStop(1, '#c724f2');
+  } else {
+    grad.addColorStop(0, '#ffd23f');
+    grad.addColorStop(0.38, '#ff7a18');
+    grad.addColorStop(0.68, '#ff2e88');
+    grad.addColorStop(1, '#7b2ff7');
+  }
   ctx.font = `${size}px Anton, sans-serif`;
   ctx.lineJoin = 'round';
-  ctx.strokeStyle = '#1a0b2e';
+  ctx.strokeStyle = neon ? '#0d0221' : '#1a0b2e';
   ctx.lineWidth = Math.max(4, size * 0.085);
-  ctx.shadowColor = 'rgba(10, 0, 20, 0.55)';
-  ctx.shadowBlur = size * 0.12;
+  ctx.shadowColor = neon ? '#00e5ff' : 'rgba(10, 0, 20, 0.55)';
+  ctx.shadowBlur = neon ? size * 0.3 : size * 0.12;
   ctx.shadowOffsetY = size * 0.03;
   ctx.strokeText(title, W / 2, baseY);
   ctx.fillStyle = grad;
@@ -348,8 +374,8 @@ function drawTitleBlock(ctx, W, H, geo, state) {
     const subSize = clamp(Math.round(titleH * 0.16), 14, 40);
     ctx.font = `${subSize}px Pacifico, cursive`;
     ctx.fillStyle = '#ffe9f3';
-    ctx.shadowColor = 'rgba(10, 0, 20, 0.5)';
-    ctx.shadowBlur = subSize * 0.2;
+    ctx.shadowColor = state.grade === 'neon' ? '#00e5ff' : 'rgba(10, 0, 20, 0.5)';
+    ctx.shadowBlur = state.grade === 'neon' ? subSize * 0.45 : subSize * 0.2;
     ctx.fillText(state.subtitle, W / 2, titleH * 0.96);
     ctx.shadowBlur = 0;
   }
@@ -359,22 +385,37 @@ function drawTitleBlock(ctx, W, H, geo, state) {
 function drawFootBand(ctx, W, H, geo, state) {
   const { footH, margin: m } = geo;
   const y = H - footH - m * 0.4;
-  // Seal: gold ring, star, two lines.
-  const d = footH * 0.92;
+  // Seal: a solid gold starburst disc with dark bold text — built to read
+  // even at thumbnail size, where a thin ring and small type vanish.
+  const d = footH;
   const cx = m + d / 2;
   const cy = y + footH / 2;
   ctx.save();
-  ctx.strokeStyle = '#ffd23f';
-  ctx.lineWidth = Math.max(2, d * 0.045);
+  // Starburst edge: 16 points, alternating radii, darker gold.
+  ctx.fillStyle = '#e8a100';
   ctx.beginPath();
-  ctx.arc(cx, cy, d / 2, 0, Math.PI * 2);
-  ctx.stroke();
+  for (let i = 0; i < 32; i++) {
+    const rad = i % 2 === 0 ? d / 2 : d * 0.44;
+    const a = -Math.PI / 2 + (i * Math.PI) / 16;
+    const x = cx + Math.cos(a) * rad;
+    const yy = cy + Math.sin(a) * rad;
+    if (i === 0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+  }
+  ctx.closePath();
+  ctx.fill();
+  // Solid gold disc.
   ctx.fillStyle = '#ffd23f';
-  drawStar(ctx, cx, cy - d * 0.2, d * 0.11, '#ffd23f');
-  ctx.font = `${Math.max(8, Math.round(d * 0.13))}px "Bebas Neue", sans-serif`;
+  ctx.beginPath();
+  ctx.arc(cx, cy, d * 0.42, 0, Math.PI * 2);
+  ctx.fill();
+  // Dark star on top, dark bold lines beneath it.
+  drawStar(ctx, cx, cy - d * 0.2, d * 0.1, '#1a0b2e');
+  ctx.fillStyle = '#1a0b2e';
+  ctx.font = `${Math.max(9, Math.round(d * 0.15))}px "Bebas Neue", sans-serif`;
   ctx.textAlign = 'center';
-  ctx.fillText('ORIGINAL', cx, cy + d * 0.1);
-  ctx.fillText('COVER ART', cx, cy + d * 0.28);
+  ctx.textBaseline = 'middle';
+  ctx.fillText('ORIGINAL', cx, cy + d * 0.06);
+  ctx.fillText('COVER ART', cx, cy + d * 0.26);
   ctx.restore();
   // Tagline centred between seal and barcode.
   const bcW = Math.max(90, W * 0.13);
@@ -414,12 +455,20 @@ let grainPattern = null;
 /** Draws the whole cover. `photos` maps panel.photoIdx to an image (or null). */
 export function drawCover(ctx, W, H, state, photos) {
   const geo = computeLayout(W, H, state.layout);
-  // Sunset backdrop: the poster paper itself.
+  // Poster paper: a warm sunset gradient — or, for Neon nights, a dark
+  // indigo-to-magenta ground so the whole poster reads differently at a glance.
   const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, '#2a0e3f');
-  bg.addColorStop(0.42, '#7a1e5c');
-  bg.addColorStop(0.72, '#e84a7a');
-  bg.addColorStop(1, '#ff9e4f');
+  if (state.grade === 'neon') {
+    bg.addColorStop(0, '#0d0221');
+    bg.addColorStop(0.4, '#2d0a4e');
+    bg.addColorStop(0.72, '#8a0f6e');
+    bg.addColorStop(1, '#c2187a');
+  } else {
+    bg.addColorStop(0, '#2a0e3f');
+    bg.addColorStop(0.42, '#7a1e5c');
+    bg.addColorStop(0.72, '#e84a7a');
+    bg.addColorStop(1, '#ff9e4f');
+  }
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
   // Gold keyline frame.
