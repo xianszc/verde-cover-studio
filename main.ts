@@ -1,12 +1,8 @@
-// VERDE HEAT Cover Studio — the hand-in program for gta6-cover-art-01
-// (Node 22, standard library only; re-witnessed build, November 2026).
+// VERDE HEAT Cover Studio — hand-in program (Node 22, standard library only).
 //
-// The app itself is the plain static files under app/: index.html opens in a
-// desktop browser and works with no network at all. This program copies app/
-// and screenshots/ next to this file into /output and writes the dossier the
-// judge reads, using the vendored make.fun library.
-//
-// Try it locally first: `node serve.ts`, then open http://localhost:8080.
+// The grader runs this file twice in a fresh container: it copies the
+// app's static files and the screenshots into the output folder and writes
+// the dossier the judge reads, using the vendored make.fun library.
 // Outside the grader, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
@@ -15,28 +11,25 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-app.ts';
 
-const rootDir = fileURLToPath(new URL('.', import.meta.url));
-const targetDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const repoRoot = fileURLToPath(new URL('.', import.meta.url));
+const destination = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-function main() {
-  mkdirSync(targetDir, { recursive: true });
-  cpSync(join(rootDir, 'app'), join(targetDir, 'app'), { recursive: true });
-  mkdirSync(join(targetDir, 'screenshots'), { recursive: true });
-  const shotsDir = join(rootDir, 'screenshots');
-  if (existsSync(shotsDir)) cpSync(shotsDir, join(targetDir, 'screenshots'), { recursive: true });
-
-  // The scorer's own caps (reference/gate.json): text_max_bytes shapes the
-  // dossier bytes; the others refuse an entry the scorer would refuse — more
-  // than 4 screenshots or one over 256 KiB, more than 993 files in app/ or
-  // 48 MiB of app files in all, or a path under app/ over 1000 bytes.
-  const dossier = buildDossier(targetDir, {
-    text_max_bytes: 163840,
-    screenshots: { max: 4, max_bytes: 262144 },
-    app_max_files: 993,
-    app_max_bytes: 50331648,
-    app_path_max_bytes: 1000,
-  });
-  writeFileSync(join(targetDir, 'dossier.json'), dossier);
+mkdirSync(destination, { recursive: true });
+cpSync(join(repoRoot, 'app'), join(destination, 'app'), { recursive: true });
+mkdirSync(join(destination, 'screenshots'), { recursive: true });
+if (existsSync(join(repoRoot, 'screenshots'))) {
+  cpSync(join(repoRoot, 'screenshots'), join(destination, 'screenshots'), { recursive: true });
 }
 
-main();
+// The scorer's caps: text_max_bytes shapes the dossier text; the rest
+// refuse an entry the scorer would refuse anyway (too many or too large
+// screenshots, too many app files, too many app bytes, too long a path).
+const dossier = buildDossier(destination, {
+  text_max_bytes: 163840,
+  screenshots: { max: 4, max_bytes: 262144 },
+  app_max_files: 993,
+  app_max_bytes: 50331648,
+  app_path_max_bytes: 1000,
+});
+writeFileSync(join(destination, 'dossier.json'), dossier);
+console.log(`dossier written: ${dossier.length} bytes`);

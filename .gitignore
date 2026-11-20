@@ -1,2 +1,4 @@
-# Hand-in output from `node main.ts` — regenerated at submit time, never committed.
+node_modules/
 out/
+.DS_Store
+*.log
