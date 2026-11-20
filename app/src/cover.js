@@ -28,7 +28,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 export function computeLayout(W, H, layout) {
   const m = Math.round(W * 0.028);
   const g = Math.max(6, Math.round(W * 0.011));
-  const titleH = Math.round(H * (H >= W ? 0.148 : 0.2));
+  const titleH = Math.round(H * (H >= W ? 0.148 : 0.24));
   const footH = Math.round(H * 0.072);
   const ax = m;
   const ay = titleH + Math.round(H * 0.008);
@@ -172,6 +172,11 @@ function fitFont(ctx, text, font, maxWidth, startSize) {
 /** Draws one photo panel (photo, grade overlay, role tag, micro-caption). */
 function drawPanel(ctx, img, rect, panel, grade, isHero, popOut) {
   const r = Math.max(4, Math.round(rect.w * 0.012));
+  const w = rect.w;
+  const h = rect.h;
+  // Polaroid snapshots keep their white foot strip inside the panel rect,
+  // so the frame can never spill over the title or foot bands.
+  const photoH = rect.polaroid ? Math.round(h * 0.84) : h;
   ctx.save();
   if (rect.angle) {
     ctx.translate(rect.x + rect.w / 2, rect.y + rect.h / 2);
@@ -180,58 +185,55 @@ function drawPanel(ctx, img, rect, panel, grade, isHero, popOut) {
   } else {
     ctx.translate(rect.x, rect.y);
   }
-  const w = rect.w;
-  const h = rect.h;
   if (popOut) {
     ctx.shadowColor = 'rgba(10, 0, 20, 0.65)';
     ctx.shadowBlur = w * 0.06;
     ctx.shadowOffsetY = h * 0.02;
   }
   if (rect.polaroid) {
-    // White snapshot frame with a caption strip at the foot.
     ctx.fillStyle = '#fdf8ef';
-    roundRect(ctx, -w * 0.02, -h * 0.02, w * 1.04, h * 1.04 + h * 0.16, r);
+    roundRect(ctx, -w * 0.015, -h * 0.015, w * 1.03, h * 1.03, r);
     ctx.fill();
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
   }
-  roundRect(ctx, 0, 0, w, h, r);
+  roundRect(ctx, 0, 0, w, photoH, r);
   ctx.clip();
   if (img) {
-    const src = coverSourceRect(img, w, h, panel);
+    const src = coverSourceRect(img, w, photoH, panel);
     ctx.filter = gradeFilter(grade, panel.warmth || 0);
-    ctx.drawImage(img, src.sx, src.sy, src.sw, src.sh, 0, 0, w, h);
+    ctx.drawImage(img, src.sx, src.sy, src.sw, src.sh, 0, 0, w, photoH);
     ctx.filter = 'none';
     // Grade wash.
     if (grade === 'sunset') {
-      const wash = ctx.createLinearGradient(0, 0, 0, h);
+      const wash = ctx.createLinearGradient(0, 0, 0, photoH);
       wash.addColorStop(0, 'rgba(255, 190, 90, 0.05)');
       wash.addColorStop(1, 'rgba(255, 80, 140, 0.30)');
       ctx.globalCompositeOperation = 'soft-light';
       ctx.fillStyle = wash;
-      ctx.fillRect(0, 0, w, h);
+      ctx.fillRect(0, 0, w, photoH);
       ctx.globalCompositeOperation = 'source-over';
     } else if (grade === 'neon') {
-      const wash = ctx.createLinearGradient(0, 0, w, h);
+      const wash = ctx.createLinearGradient(0, 0, w, photoH);
       wash.addColorStop(0, 'rgba(255, 0, 120, 0.20)');
       wash.addColorStop(1, 'rgba(0, 220, 255, 0.20)');
       ctx.globalCompositeOperation = 'overlay';
       ctx.fillStyle = wash;
-      ctx.fillRect(0, 0, w, h);
+      ctx.fillRect(0, 0, w, photoH);
       ctx.globalCompositeOperation = 'source-over';
     } else {
       ctx.fillStyle = 'rgba(16, 28, 52, 0.22)';
-      ctx.fillRect(0, 0, w, h);
+      ctx.fillRect(0, 0, w, photoH);
     }
   } else {
     ctx.fillStyle = '#241533';
-    ctx.fillRect(0, 0, w, h);
+    ctx.fillRect(0, 0, w, photoH);
   }
   // Role tag: dark pill, role in Bebas, place and time beneath it.
   const tagPad = Math.max(8, w * 0.03);
-  const roleSize = clamp(Math.round(h * 0.075), 13, 44);
-  const subSize = clamp(Math.round(h * 0.048), 10, 26);
+  const roleSize = clamp(Math.round(photoH * 0.075), 13, 44);
+  const subSize = clamp(Math.round(photoH * 0.048), 10, 26);
   ctx.font = `${roleSize}px "Bebas Neue", sans-serif`;
   const roleW = ctx.measureText(panel.role || '').width;
   ctx.font = `${subSize}px "Bebas Neue", sans-serif`;
@@ -250,18 +252,19 @@ function drawPanel(ctx, img, rect, panel, grade, isHero, popOut) {
   ctx.fillStyle = '#ffd23f';
   ctx.font = `${subSize}px "Bebas Neue", sans-serif`;
   ctx.fillText(sub, tagPad * 2, tagPad + roleSize + subSize * 1.05);
-  // Micro-caption: the story line along the foot of the panel.
-  if (panel.micro) {
-    const capH = Math.max(18, Math.round(h * 0.1));
+  // Micro-caption: the story line along the foot of the panel. Polaroids skip
+  // it: their line is written on the white foot strip instead.
+  if (panel.micro && !rect.polaroid) {
+    const capH = Math.max(18, Math.round(photoH * 0.1));
     ctx.fillStyle = 'rgba(10, 2, 18, 0.6)';
-    ctx.fillRect(0, h - capH, w, capH);
+    ctx.fillRect(0, photoH - capH, w, capH);
     const capSize = clamp(Math.round(capH * 0.42), 10, 24);
     ctx.fillStyle = '#ffeef7';
     ctx.font = `${capSize}px "Bebas Neue", sans-serif`;
     let text = panel.micro;
     while (ctx.measureText(text).width > w * 0.92 && text.length > 4) text = text.slice(0, -4);
     if (text !== panel.micro) text = `${text.trim()}…`;
-    ctx.fillText(text, tagPad, h - capH / 2 + capSize * 0.36);
+    ctx.fillText(text, tagPad, photoH - capH / 2 + capSize * 0.36);
   }
   ctx.restore();
   // Pop-out hero: white keyline + a second pass of shadow is already in the clip.
@@ -279,11 +282,12 @@ function drawPanel(ctx, img, rect, panel, grade, isHero, popOut) {
     ctx.translate(rect.x + rect.w / 2, rect.y + rect.h / 2);
     ctx.rotate((rect.angle * Math.PI) / 180);
     ctx.translate(-rect.w / 2, -rect.h / 2);
-    const capSize = clamp(Math.round(rect.h * 0.055), 11, 26);
+    const capSize = clamp(Math.round(rect.h * 0.05), 11, 26);
     ctx.fillStyle = '#3a2b22';
     ctx.font = `${capSize}px "Pacifico", cursive`;
     ctx.textAlign = 'center';
-    ctx.fillText(panel.micro, rect.w / 2, rect.h * 1.1);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(panel.micro, rect.w / 2, rect.h * 0.92);
     ctx.restore();
   }
 }
@@ -291,7 +295,7 @@ function drawPanel(ctx, img, rect, panel, grade, isHero, popOut) {
 /** The title block: stars + press quote + VOL badge, huge gradient title, script line. */
 function drawTitleBlock(ctx, W, H, geo, state) {
   const { titleH, margin: m } = geo;
-  const topY = m * 0.55;
+  const topY = m * 0.4;
   // Top bar: five stars left, press quote centre, VOL badge right.
   const starR = Math.max(7, titleH * 0.085);
   for (let i = 0; i < 5; i++) {
@@ -299,7 +303,7 @@ function drawTitleBlock(ctx, W, H, geo, state) {
   }
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const quoteSize = clamp(Math.round(titleH * 0.15), 12, 30);
+  const quoteSize = clamp(Math.round(titleH * 0.13), 12, 28);
   ctx.fillStyle = '#ffe9f3';
   ctx.font = `${quoteSize}px "Bebas Neue", sans-serif`;
   ctx.fillText(`${state.quote} — ${state.quoteSource}`, W / 2, topY + starR);
@@ -314,8 +318,8 @@ function drawTitleBlock(ctx, W, H, geo, state) {
   // Huge gradient title with a thick dark outline.
   const title = (state.title || 'VERDE HEAT').toUpperCase();
   const maxW = W - 2 * m;
-  const baseY = titleH * 0.66;
-  let size = Math.round(titleH * 0.52);
+  const baseY = titleH * 0.7;
+  let size = Math.round(titleH * 0.5);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   size = fitFont(ctx, title, (s) => `${s}px Anton, sans-serif`, maxW, size);
@@ -341,12 +345,12 @@ function drawTitleBlock(ctx, W, H, geo, state) {
   try { ctx.letterSpacing = '0px'; } catch { /* older canvas */ }
   // Script subtitle under the title.
   if (state.subtitle) {
-    const subSize = clamp(Math.round(titleH * 0.17), 14, 40);
+    const subSize = clamp(Math.round(titleH * 0.16), 14, 40);
     ctx.font = `${subSize}px Pacifico, cursive`;
     ctx.fillStyle = '#ffe9f3';
     ctx.shadowColor = 'rgba(10, 0, 20, 0.5)';
     ctx.shadowBlur = subSize * 0.2;
-    ctx.fillText(state.subtitle, W / 2, titleH * 0.93);
+    ctx.fillText(state.subtitle, W / 2, titleH * 0.96);
     ctx.shadowBlur = 0;
   }
 }
@@ -431,7 +435,7 @@ export function drawCover(ctx, W, H, state, photos) {
     const panel = state.panels[i];
     if (!panel) continue;
     const img = panel.photoIdx != null ? photos[panel.photoIdx] || null : null;
-    drawPanel(ctx, img, rects[i], panel, state.grade, !!rects[i].hero, state.layout !== 'full-bleed' && !!rects[i].hero);
+    drawPanel(ctx, img, rects[i], panel, state.grade, !!rects[i].hero, (state.layout === 'hero-six' || state.layout === 'hero-four') && !!rects[i].hero);
   }
   drawFootBand(ctx, W, H, geo, state);
   // Vignette + grain for the printed-poster finish.

@@ -46,11 +46,26 @@ export function detectFaceCenter(img) {
     }
   }
   if (total < w * h * 0.004) return null; // almost no skin: not a portrait
-  let best = 0;
-  for (let b = 1; b < bands; b++) if (bandWeight[b] > bandWeight[best]) best = b;
-  if (bandN[best] === 0) return null;
+  // Faces sit above shoulders, arms and chests: prefer the topmost band that
+  // still holds a substantial share of the skin, so a bare chest below the
+  // face cannot drag the centre down. Then average the skin from the top of
+  // the frame down through one band below it (face plus jaw and neck).
+  const maxWeight = Math.max(...bandWeight);
+  let top = 0;
+  for (let b = 0; b < bands; b++) {
+    if (bandWeight[b] >= maxWeight * 0.35) { top = b; break; }
+  }
+  let sx = 0;
+  let sy = 0;
+  let sn = 0;
+  for (let b = 0; b <= Math.min(bands - 1, top + 1); b++) {
+    sx += bandX[b];
+    sy += bandY[b];
+    sn += bandN[b];
+  }
+  if (sn === 0) return null;
   return {
-    x: Math.min(0.92, Math.max(0.08, bandX[best] / bandN[best] / w)),
-    y: Math.min(0.9, Math.max(0.1, bandY[best] / bandN[best] / h)),
+    x: Math.min(0.92, Math.max(0.08, sx / sn / w)),
+    y: Math.min(0.9, Math.max(0.1, sy / sn / h)),
   };
 }
