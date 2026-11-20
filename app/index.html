@@ -8,78 +8,90 @@
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-<header class="topbar">
-  <div class="brand"><span class="logo">VERDE HEAT</span><span class="sub">Cover Studio — GTA-style poster maker</span></div>
-  <div class="sizes" id="size-options" role="group" aria-label="Export size"></div>
-  <div class="history">
-    <button id="undo" type="button" disabled>Undo</button>
-    <button id="redo" type="button" disabled>Redo</button>
+<header class="bar">
+  <div class="brandmark">
+    <span class="wordmark">VERDE HEAT</span>
+    <span class="strapline">Cover Studio — GTA-style poster maker</span>
   </div>
-  <div class="exports">
-    <button id="export-one" type="button" class="primary">Export PNG</button>
-    <button id="export-all" type="button">Export all 3 sizes</button>
+  <div class="seg" id="sizeRow" role="group" aria-label="Export size"></div>
+  <div class="hist">
+    <button id="undoBtn" type="button" disabled>Undo</button>
+    <button id="redoBtn" type="button" disabled>Redo</button>
+  </div>
+  <div class="actions">
+    <button id="exportBtn" type="button" class="btn-hot">Export PNG</button>
+    <button id="exportAllBtn" type="button">Export all 3 sizes</button>
   </div>
 </header>
-<main class="app">
-  <aside class="panel left">
-    <section>
+
+<main class="workspace">
+  <aside class="side">
+    <section class="card">
       <h2>1 · Photos</h2>
-      <p class="hint">Upload your own, or use a sample. Click a thumbnail to put it in the selected panel.</p>
-      <label class="upload">+ Add photos <input id="upload" type="file" accept="image/*" multiple hidden></label>
-      <div id="photo-strip" class="strip"></div>
+      <p class="note">Upload your own, or use a sample. Click a thumbnail to put it in the selected panel.</p>
+      <label class="drop">+ Add photos <input id="uploadInput" type="file" accept="image/*" multiple hidden></label>
+      <div id="thumbRail" class="rail"></div>
     </section>
-    <section>
+
+    <section class="card">
       <h2>2 · Layout</h2>
-      <div id="layout-options" class="opts"></div>
+      <div id="layoutRow" class="chips"></div>
     </section>
-    <section>
+
+    <section class="card">
       <h2>3 · Grade</h2>
-      <div id="grade-options" class="opts"></div>
-      <button id="shuffle" type="button">Shuffle look</button>
+      <div id="gradeRow" class="chips"></div>
+      <button id="shuffleBtn" type="button">Shuffle look</button>
     </section>
-    <section>
+
+    <section class="card">
       <h2>4 · Caption</h2>
-      <label>Title <input id="caption-title" type="text" maxlength="24" value="VERDE HEAT"></label>
-      <label>Script line <input id="caption-subtitle" type="text" maxlength="48" value="salt air &amp; fast hearts"></label>
-      <label>Tagline <input id="caption-tagline" type="text" maxlength="60" value="SIX SOULS · ONE COAST · GOLDEN HOUR"></label>
-      <label>Press quote <input id="caption-quote" type="text" maxlength="60" value="&quot;A sun-soaked blast.&quot;"></label>
+      <label class="field">Title <input id="capTitle" type="text" maxlength="24" value="VERDE HEAT"></label>
+      <label class="field">Script line <input id="capScript" type="text" maxlength="48" value="salt air &amp; fast hearts"></label>
+      <label class="field">Tagline <input id="capTag" type="text" maxlength="60" value="SIX SOULS · ONE COAST · GOLDEN HOUR"></label>
+      <label class="field">Press quote <input id="capQuote" type="text" maxlength="60" value="&quot;A sun-soaked blast.&quot;"></label>
     </section>
-    <section>
+
+    <section class="card">
       <h2>5 · Project</h2>
-      <div class="row">
-        <button id="save-project" type="button">Save project</button>
-        <label class="upload" style="flex:1;margin:0">Load project <input id="load-file" type="file" accept="application/json,.json" hidden></label>
+      <div class="duo">
+        <button id="btnSave" type="button">Save project</button>
+        <label class="drop" style="flex:1;margin:0">Load project <input id="loadInput" type="file" accept="application/json,.json" hidden></label>
       </div>
-      <p class="hint" id="autosave-note">Autosave on — your work is kept in this browser and restored when you reopen the page.</p>
+      <p class="note" id="autosaveLine">Autosave on — your work is kept in this browser and restored when you reopen the page.</p>
     </section>
   </aside>
-  <section class="stage">
-    <canvas id="cover" width="1080" height="1350" aria-label="Live cover preview"></canvas>
-    <p id="status" role="status"></p>
-    <p class="hint">Drag a panel to move its photo · Scroll to zoom · Click a panel to edit it · Ctrl+Z undo · Ctrl+S save project</p>
+
+  <section class="viewer">
+    <canvas id="stageCanvas" width="1080" height="1350" aria-label="Live cover preview"></canvas>
+    <p id="statusLine" role="status"></p>
+    <p class="note centre">Drag a panel to move its photo · Scroll to zoom · Click a panel to edit it · Ctrl+Z undo · Ctrl+S save project</p>
   </section>
-  <aside class="panel right">
-    <section>
-      <h2 id="panel-title">Panel 1</h2>
-      <div id="panel-list"></div>
+
+  <aside class="side">
+    <section class="card">
+      <h2 id="panelHeading">Panel 1</h2>
+      <div id="panelRows"></div>
     </section>
-    <section>
-      <label>Photo <select id="panel-photo"></select></label>
-      <label>Zoom <span class="val" id="panel-zoom-val">1.00×</span><input id="panel-zoom" type="range" min="1" max="3" step="0.01" value="1"></label>
-      <label>Move sideways <input id="panel-ox" type="range" min="-1" max="1" step="0.01" value="0"></label>
-      <label>Move up / down <input id="panel-oy" type="range" min="-1" max="1" step="0.01" value="0"></label>
-      <div class="row">
-        <button id="autocrop" type="button">Auto-crop on face</button>
-        <button id="fill-all" type="button">Use in every panel</button>
+
+    <section class="card">
+      <label class="field">Photo <select id="pPhoto"></select></label>
+      <label class="field">Zoom <span class="num" id="pZoomVal">1.00×</span><input id="pZoom" type="range" min="1" max="3" step="0.01" value="1"></label>
+      <label class="field">Move sideways <input id="pOX" type="range" min="-1" max="1" step="0.01" value="0"></label>
+      <label class="field">Move up / down <input id="pOY" type="range" min="-1" max="1" step="0.01" value="0"></label>
+      <div class="duo">
+        <button id="btnFace" type="button">Auto-crop on face</button>
+        <button id="btnFill" type="button">Use in every panel</button>
       </div>
-      <label>Role tag <input id="panel-role" type="text" maxlength="20" value="THE QUEEN"></label>
-      <label>Place <input id="panel-place" type="text" maxlength="20" value="VERDE BAY"></label>
-      <label>Time <input id="panel-time" type="text" maxlength="20" value="GOLDEN HOUR"></label>
-      <label>Story line <input id="panel-micro" type="text" maxlength="60" value="She came back for one last summer."></label>
-      <label>Warmth <span class="val" id="panel-warmth-val">0.0</span><input id="panel-warmth" type="range" min="-1" max="1" step="0.1" value="0"></label>
+      <label class="field">Role tag <input id="pRole" type="text" maxlength="20" value="THE QUEEN"></label>
+      <label class="field">Place <input id="pPlace" type="text" maxlength="20" value="VERDE BAY"></label>
+      <label class="field">Time <input id="pTime" type="text" maxlength="20" value="GOLDEN HOUR"></label>
+      <label class="field">Story line <input id="pLine" type="text" maxlength="60" value="She came back for one last summer."></label>
+      <label class="field">Warmth <span class="num" id="pWarmVal">0.0</span><input id="pWarm" type="range" min="-1" max="1" step="0.1" value="0"></label>
     </section>
   </aside>
 </main>
-<script type="module" src="./src/main.js"></script>
+
+<script type="module" src="./src/studio.js"></script>
 </body>
 </html>
