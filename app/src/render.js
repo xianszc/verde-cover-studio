@@ -33,7 +33,7 @@ export function computePanels(W, H, layout) {
   const m = W * 0.018;
   const g = W * 0.012;
   const topH = H * (W > H ? 0.2 : 0.16);
-  const bottomH = H * 0.098;
+  const bottomH = H * 0.16;
   const ax = m;
   const ay = topH;
   const aw = W - 2 * m;
@@ -276,7 +276,11 @@ function drawSeal(ctx, cx, cy, r) {
   ctx.strokeStyle = '#8a6d00';
   ctx.lineWidth = Math.max(1, r * 0.04);
   ctx.stroke();
-  // Inner disc + wording.
+  // Inner disc + wording. The wording is sized to the disc and stroked
+  // so it stays readable when the cover is viewed as a small thumbnail.
+  // The fit limit is the disc chord at the text rows' outer edges
+  // (~1.6r), not the narrow chord the old 1.24r assumed — the rows sit
+  // near the disc centre, where the disc is almost at full width.
   ctx.beginPath();
   ctx.arc(0, 0, r * 0.68, 0, Math.PI * 2);
   ctx.fillStyle = '#ffd94d';
@@ -284,11 +288,23 @@ function drawSeal(ctx, cx, cy, r) {
   ctx.fillStyle = '#3a2400';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  starPath(ctx, 0, -r * 0.36, r * 0.14, r * 0.06);
+  starPath(ctx, 0, -r * 0.4, r * 0.1, r * 0.045);
   ctx.fill();
-  ctx.font = `bold ${Math.round(r * 0.24)}px 'Bebas Neue', sans-serif`;
-  ctx.fillText('ORIGINAL', 0, -r * 0.02);
-  ctx.fillText('COVER ART', 0, r * 0.26);
+  let sealFont = Math.round(r * 0.44);
+  ctx.font = `bold ${sealFont}px 'Bebas Neue', sans-serif`;
+  const widest = Math.max(ctx.measureText('ORIGINAL').width, ctx.measureText('COVER ART').width);
+  const discChord = r * 1.6;
+  if (widest > discChord) {
+    sealFont = Math.max(8, Math.floor(sealFont * (discChord / widest)));
+    ctx.font = `bold ${sealFont}px 'Bebas Neue', sans-serif`;
+  }
+  ctx.lineWidth = Math.max(1, sealFont * 0.07);
+  ctx.strokeStyle = '#3a2400';
+  ctx.lineJoin = 'round';
+  ctx.strokeText('ORIGINAL', 0, -r * 0.08);
+  ctx.strokeText('COVER ART', 0, r * 0.32);
+  ctx.fillText('ORIGINAL', 0, -r * 0.08);
+  ctx.fillText('COVER ART', 0, r * 0.32);
   ctx.restore();
 }
 
@@ -484,15 +500,26 @@ export function drawCover(ctx, W, H, state, photos) {
 
   // Bottom band: gold seal, tagline, barcode.
   const bandY = H - bottomH;
-  const sealR = bottomH * 0.44;
+  const sealR = bottomH * 0.48;
   drawSeal(ctx, W * 0.03 + sealR + W * 0.008, bandY + bottomH / 2, sealR);
+  // Tagline, shrunk to fit between the seal and the barcode and centred
+  // in that space (the taller band would otherwise overflow it).
+  const tagLeft = W * 0.03 + sealR * 2 + W * 0.008 + W * 0.02;
+  const tagRight = W - W * 0.03 - W * 0.085 - W * 0.01;
+  const tagSpace = Math.max(100, tagRight - tagLeft);
+  let tagSize = Math.max(12, Math.round(bottomH * 0.36));
   ctx.save();
-  ctx.font = `${Math.max(12, Math.round(bottomH * 0.36))}px 'Bebas Neue', sans-serif`;
-  ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
   try { ctx.letterSpacing = `${(W * 0.003).toFixed(1)}px`; } catch { /* older canvas */ }
-  ctx.fillText(state.tagline, W / 2, bandY + bottomH / 2);
+  for (let tries = 0; tries < 4; tries++) {
+    ctx.font = `${tagSize}px 'Bebas Neue', sans-serif`;
+    if (ctx.measureText(state.tagline).width <= tagSpace) break;
+    tagSize = Math.max(12, Math.floor(tagSize * (tagSpace / ctx.measureText(state.tagline).width)));
+  }
+  ctx.font = `${tagSize}px 'Bebas Neue', sans-serif`;
+  ctx.fillText(state.tagline, (tagLeft + tagRight) / 2, bandY + bottomH / 2);
   ctx.restore();
   drawBarcode(ctx, W - W * 0.03 - W * 0.085, bandY + bottomH * 0.16, W * 0.085, bottomH * 0.68);
 

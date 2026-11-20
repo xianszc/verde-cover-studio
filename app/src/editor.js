@@ -26,13 +26,19 @@ const SAMPLES = [
 // hats and bare arms can out-score a small face, so the shipped photos
 // use these hand-measured points and the finder only runs on uploads.
 const CURATED = {
-  'hero.jpg': { x: 0.52, y: 0.44 },
+  'hero.jpg': { x: 0.52, y: 0.43 },
   'rooftop.jpg': { x: 0.5, y: 0.35 },
   'friends.jpg': { x: 0.55, y: 0.41 },
-  'pier.jpg': { x: 0.5, y: 0.4 },
+  'pier.jpg': { x: 0.5, y: 0.42 },
   'driver.jpg': { x: 0.47, y: 0.4 },
-  'captain.jpg': { x: 0.5, y: 0.45 },
-  'boulevard.jpg': { x: 0.5, y: 0.31 },
+  // Raised above the face centre: the wide panels crop a narrow band, and
+  // the cap is cut off at the face point. 0.40 is the best compromise the
+  // portrait panel allows — its window is only ~half the photo tall, so
+  // the whole cap and the whole mouth cannot both fit; this keeps the
+  // full face visible while cutting the least cap (0.33 shows the cap
+  // but hides the mouth behind the caption band).
+  'captain.jpg': { x: 0.5, y: 0.4 },
+  'boulevard.jpg': { x: 0.51, y: 0.29 },
   'angler.jpg': { x: 0.5, y: 0.33 },
 };
 
@@ -550,7 +556,10 @@ $('autocrop').addEventListener('click', () => {
   const panel = state.panels[state.selected];
   const photo = state.photos[panel.photoIdx];
   if (!photo) return;
-  const focus = findFaceCenter(photo.img);
+  // Shipped samples use their hand-measured point: the skin finder misses
+  // the face on hero, pier and boulevard, so auto-crop must not trust it
+  // there. Uploads still go through the finder (null = no face found).
+  const focus = CURATED[(photo.file || '').split('/').pop()] || findFaceCenter(photo.img);
   if (focus) {
     panel.focus = focus;
     panel.ox = 0;
