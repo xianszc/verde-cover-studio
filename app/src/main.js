@@ -534,7 +534,12 @@ canvas.addEventListener('pointermove', (e) => {
   queueRender();
 });
 canvas.addEventListener('pointerup', () => {
-  if (drag) commitHistory();
+  if (drag) {
+    // A click that only selects a panel is not an edit: committing it would
+    // wipe the redo stack for nothing. Only a real move counts as a change.
+    const panel = state.panels[state.selected];
+    if (Math.abs(panel.ox - drag.ox) > 0.005 || Math.abs(panel.oy - drag.oy) > 0.005) commitHistory();
+  }
   drag = null;
 });
 canvas.addEventListener('wheel', (e) => {
